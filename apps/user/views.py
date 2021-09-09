@@ -152,7 +152,7 @@ class ResetPassword(GenericAPIView):
 class ChangePass(GenericAPIView):
     permission_classes = (AllowAny,)
 
-    def get(self, request, *args, **kwargs):
+    def patch(self, request, *args, **kwargs):
         print(request.data)
 
         token = request.GET.get('token')
@@ -160,6 +160,7 @@ class ChangePass(GenericAPIView):
         print(password)
         try:
             access_token = AccessToken(token)
+            print('JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ',self.request.user)
             user_id = access_token.payload.get('user_id')
             # payload = jwt.decode(token, os.environ.get("SECRET_KEY"))
             user = UserModel.objects.get(id=user_id)
