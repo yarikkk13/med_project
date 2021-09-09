@@ -1,6 +1,6 @@
 import os
 
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import EmailMultiAlternatives, EmailMessage
 from django.template.loader import get_template
 
 
@@ -12,6 +12,11 @@ class MailService:
         msg = EmailMultiAlternatives('hi', 'You are registered', os.environ.get('EMAIL_HOST_USER'), [to])
         msg.attach_alternative(html_content, "text/html")
         msg.send()
+
+    @staticmethod
+    def verify_email(data):
+        email = EmailMessage(subject=data['email_subject'], body=data['email_body'], to=[data['to_email']])
+        email.send()
 
     @staticmethod
     def change_password_mail_sender(id, to):

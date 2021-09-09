@@ -1,18 +1,25 @@
+import os
+
+import jwt
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
+from django.contrib.sites.shortcuts import get_current_site
+from django.urls import reverse
 
 from rest_framework import status
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView, UpdateAPIView
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView, UpdateAPIView, GenericAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 
 from .serializers import (  # UserStartChangePasswordSerializer,
     UserChangePasswordSerializer,
     UserSerializer,
     UserUpdateSerializer,
 )
+from core.services.mail_service import MailService
 
 UserModel: User = get_user_model()
 
@@ -32,7 +39,8 @@ class UserRetrieveUpdateSoftDeleteView(RetrieveUpdateAPIView):
         pk = kwargs.get('pk')
         try:
             data = UserModel.objects.get(pk=pk)
-        except Exception:
+        # except Exception as e:
+        except UserModel.DoesNotExist:
             return Response('Not Found', status.HTTP_404_NOT_FOUND)
         data.is_active = False
         data.deleted = True
@@ -58,7 +66,7 @@ class UserActivatorView(APIView):
         pk = kwargs.get('pk')
         try:
             data = UserModel.objects.get(pk=pk)
-        except Exception:
+        except UserModel.DoesNotExist:
             return Response('Not Found', status.HTTP_404_NOT_FOUND)
         data.is_active = True
         data.save()
@@ -69,3 +77,49 @@ class UserActivatorView(APIView):
 class UserStartChangePasswordView(TokenObtainPairView):
     permission_classes = (AllowAny,)
     # serializer_class = UserStartChangePasswordSerializer
+
+
+class Registering(GenericAPIView):
+    serializer_class = UserSerializer
+    permission_classes = (AllowAny,)
+
+    def post(self, request):
+        user = request.data
+        serializer = self.serializer_class(data=user)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        user_data = serializer.data
+        user = UserModel.objects.get(email=user_data['email'])
+
+        token = RefreshToken.for_user(user).access_token
+
+        # current_site = get_current_site(request).domain
+        # relative_link = reverse('email-verify')
+        # absurl = 'http://'+current_site+relative_link+"?token="+str(token)
+        absurl = 'http://localhost:8000/api/v1/auth/verify/?token=' + str(token)
+        email_body = 'Hi '+user.name+'Use link below to verify email \n' + absurl
+        data = {'email_body': email_body, 'to_email': user.email, 'email_subject': 'Verify your email'}
+
+        MailService.verify_email(data)
+
+        return Response(user_data, status=status.HTTP_201_CREATED)
+
+
+class VerifyEmail(GenericAPIView):
+    permission_classes = (AllowAny,)
+
+    def get(self, request):
+        token = request.GET.get('token')
+        try:
+            access_token = AccessToken(token)
+            user_id = access_token.payload.get('user_id')
+            # payload = jwt.decode(token, os.environ.get("SECRET_KEY"))
+            user = UserModel.objects.get(id=user_id)
+            if not user.is_active:
+                user.is_active = True
+                user.save()
+            return Response({'email': 'Successfully activated'}, status.HTTP_200_OK)
+        except jwt.ExpiredSignatureError:
+            return Response({'error': 'Activation expired'}, status.HTTP_400_BAD_REQUEST)
+        except jwt.exceptions.DecodeError:
+            return Response({'error': 'invalid token'}, status.HTTP_400_BAD_REQUEST)
