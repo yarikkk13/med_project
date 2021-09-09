@@ -97,7 +97,7 @@ class Registering(GenericAPIView):
         # relative_link = reverse('email-verify')
         # absurl = 'http://'+current_site+relative_link+"?token="+str(token)
         absurl = 'http://localhost:8000/api/v1/auth/verify/?token=' + str(token)
-        email_body = 'Hi '+user.name+'Use link below to verify email \n' + absurl
+        email_body = 'Hi ' + user.name + 'Use link below to verify email \n' + absurl
         data = {'email_body': email_body, 'to_email': user.email, 'email_subject': 'Verify your email'}
 
         MailService.verify_email(data)
@@ -115,6 +115,55 @@ class VerifyEmail(GenericAPIView):
             user_id = access_token.payload.get('user_id')
             # payload = jwt.decode(token, os.environ.get("SECRET_KEY"))
             user = UserModel.objects.get(id=user_id)
+            if not user.is_active:
+                user.is_active = True
+                user.save()
+            return Response({'email': 'Successfully activated'}, status.HTTP_200_OK)
+        except jwt.ExpiredSignatureError:
+            return Response({'error': 'Activation expired'}, status.HTTP_400_BAD_REQUEST)
+        except jwt.exceptions.DecodeError:
+            return Response({'error': 'invalid token'}, status.HTTP_400_BAD_REQUEST)
+
+
+class ResetPassword(GenericAPIView):
+    permission_classes = (AllowAny,)
+
+    def post(self, request, *args, **kwargs):
+        print(request.data)
+        email = request.data['email']
+        name = request.data['name']
+        print(email)
+        try:
+            user = UserModel.objects.get(email=email)
+        except UserModel.DoesNotExist:
+            return Response('Not Found', status.HTTP_404_NOT_FOUND)
+
+        token = RefreshToken.for_user(user).access_token
+
+        absurl = 'http://localhost:8000/api/v1/auth/reset/?token=' + str(token)
+        email_body = 'Hi ' + name + 'Use link below to reset password \n' + absurl
+        data = {'email_body': email_body, 'to_email': email, 'email_subject': 'Reset password'}
+
+        MailService.reset_password(data)
+
+        return Response('email send', status=status.HTTP_200_OK)
+
+
+class ChangePass(GenericAPIView):
+    permission_classes = (AllowAny,)
+
+    def get(self, request, *args, **kwargs):
+        print(request.data)
+
+        token = request.GET.get('token')
+        password = request.GET.get('password')
+        print(password)
+        try:
+            access_token = AccessToken(token)
+            user_id = access_token.payload.get('user_id')
+            # payload = jwt.decode(token, os.environ.get("SECRET_KEY"))
+            user = UserModel.objects.get(id=user_id)
+            print(user.password)
             if not user.is_active:
                 user.is_active = True
                 user.save()

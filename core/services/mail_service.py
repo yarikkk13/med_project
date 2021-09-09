@@ -19,6 +19,12 @@ class MailService:
         email.send()
 
     @staticmethod
+
+    def reset_password(data):
+        email = EmailMessage(subject=data['email_subject'], body=data['email_body'], to=[data['to_email']])
+        email.send()
+
+    @staticmethod
     def change_password_mail_sender(id, to):
         template = get_template('change_password_mail.html')
         html_content = template.render({"id": id})
